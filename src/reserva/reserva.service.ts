@@ -3,7 +3,7 @@ import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Reserva } from './entities/reserva.entity';
-import { Between, DataSource, In, MoreThan, Repository } from 'typeorm';
+import { Between, DataSource, In, Like, MoreThan, Repository } from 'typeorm';
 import { Usuario } from '../usuario/entities/usuario.entity';
 import { Cliente } from '../cliente/entities/cliente.entity';
 import { Cancha } from '../cancha/entities/cancha.entity';
@@ -262,7 +262,78 @@ export class ReservaService {
       this.handleDBExceptions(error);
     }
   }
+
+
+  async reporteMonto(tipo: 'diario' | 'mensual', fecha: string) {
+    this.validarFecha(tipo, fecha);
   
+    const patron = `${fecha}%`;
+  
+    const resultado = await this.reservaRepository
+      .createQueryBuilder('reserva')
+      .select('COALESCE(SUM(reserva.monto), 0)', 'totalMonto')
+      .addSelect('COUNT(reserva.id)', 'cantidadReservas')
+      .where('reserva.fecha_hora_inicio LIKE :patron', { patron })
+      .andWhere('reserva.estado = :estado', { estado: 2 }) // solo reservas finalizadas
+      .getRawOne();
+  
+    return {
+      tipo,
+      fecha,
+      totalMonto: Number(resultado.totalMonto),
+      cantidadReservas: Number(resultado.cantidadReservas),
+    };
+  }
+  
+  private validarFecha(tipo: string, fecha: string) {
+    if (tipo !== 'diario' && tipo !== 'mensual') {
+      throw new BadRequestException('El parámetro "tipo" debe ser "diario" o "mensual"');
+    }
+  
+    const patronDiario = /^\d{4}-\d{2}-\d{2}$/;   // 2026-08-16
+    const patronMensual = /^\d{4}-\d{2}$/;         // 2026-08
+  
+    if (tipo === 'diario' && !patronDiario.test(fecha)) {
+      throw new BadRequestException('Para tipo "diario", "fecha" debe tener formato YYYY-MM-DD');
+    }
+    if (tipo === 'mensual' && !patronMensual.test(fecha)) {
+      throw new BadRequestException('Para tipo "mensual", "fecha" debe tener formato YYYY-MM');
+    }
+  }
+
+  // en reserva.service.ts
+
+  async reservasParaMensaje(fecha: string) {
+    const patronDiario = /^\d{4}-\d{2}-\d{2}$/;
+    if (!patronDiario.test(fecha)) {
+      throw new BadRequestException('"fecha" debe tener formato YYYY-MM-DD');
+    }
+
+    const patron = `${fecha}%`;
+
+    const reservas = await this.reservaRepository.find({
+      select: {
+        nombre: true,
+        fecha_hora_inicio: true,
+        fecha_hora_fin: true,
+        cancha: { cancha: true },
+      },
+      where: {
+        fecha_hora_inicio: Like(patron),
+        estado: In([1, 2]), // se excluyen las canceladas (estado 0)
+      },
+      relations: ['cancha'],
+      order: { fecha_hora_inicio: 'ASC' },
+    });
+
+    return reservas.map((r) => ({
+      nombre: r.nombre,
+      cancha: r.cancha.cancha,
+      fecha_hora_inicio: r.fecha_hora_inicio,
+      fecha_hora_fin: r.fecha_hora_fin,
+    }));
+  }
+    
 
   private handleDBExceptions( error: any ) {
 
@@ -274,6 +345,8 @@ export class ReservaService {
     throw new InternalServerErrorException('Unexpected error, check server logs');
 
   }
+
+  
 
 
 }

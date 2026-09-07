@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, BadRequestException, ForbiddenException, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, BadRequestException, ForbiddenException, UseGuards, Query } from '@nestjs/common';
 import { ReservaService } from './reserva.service';
 import { CreateReservaDto } from './dto/create-reserva.dto';
 import { UpdateReservaDto } from './dto/update-reserva.dto';
 import { GetUser } from '../usuario/decorators/get-user.decorator';
 import { AuthGuard } from '@nestjs/passport';
+import { Auth } from '../usuario/decorators/auth.decorator';
+import { ValidRoles } from '../usuario/interface/validRoles';
 
 @Controller('reserva')
 export class ReservaController {
@@ -13,6 +15,23 @@ export class ReservaController {
   @UseGuards(AuthGuard())
   create(@Body() createReservaDto: CreateReservaDto) {
     return this.reservaService.create(createReservaDto);
+  }
+
+  // en reserva.controller.ts
+
+  @Get('mensaje-dia')
+  @Auth(ValidRoles.usuario) // solo usuarios
+  getMensajeDia(@Query('fecha') fecha: string) {
+    return this.reservaService.reservasParaMensaje(fecha);
+  }
+
+  @Get('reporte')
+  @Auth(ValidRoles.usuario) // solo usuarios, nunca clientes
+  getReporte(
+    @Query('tipo') tipo: 'diario' | 'mensual',
+    @Query('fecha') fecha: string,
+  ) {
+    return this.reservaService.reporteMonto(tipo, fecha);
   }
 
   @Get('my-reservas')
