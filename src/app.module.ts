@@ -24,10 +24,9 @@ import { RolesModule } from './roles/roles.module';
           password: process.env.DB_PASSWORD,
           autoLoadEntities: true,
           synchronize: false,
-          //ssl: {
-          //  rejectUnauthorized: false,
-         // },
-         ssl: false
+          ssl: {
+            rejectUnauthorized: false,
+          },
         };
       },
     }),
